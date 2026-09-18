@@ -149,7 +149,7 @@ Render найшвидше дає публічний Python URL без картк
 1. Створити Neon project і скопіювати pooled connection string.
 2. Створити Render Web Service з цього repository або через `render.yaml`.
 3. Додати Render secrets: `DATABASE_URL`, `CRON_SECRET`, `GEMINI_API_KEY`, `BASE_URL`.
-4. У GitHub Actions додати repository variable `CHANNEL_RADAR_URL` і secret `CRON_SECRET`.
+4. У GitHub Actions додати secret `CRON_SECRET`; URL цього deployment уже вказаний у workflow.
 5. Запустити workflow `Collect channel updates` вручну й перевірити `/readyz`.
 
 Актуальні на 18.09.2026 обмеження, які враховані:

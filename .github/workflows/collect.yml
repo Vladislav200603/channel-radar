@@ -15,7 +15,7 @@ jobs:
     steps:
       - name: Wake service and collect
         env:
-          SERVICE_URL: ${{ vars.CHANNEL_RADAR_URL }}
+          SERVICE_URL: https://channel-radar-6kls.onrender.com
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           test -n "$SERVICE_URL"
@@ -24,4 +24,3 @@ jobs:
             --retry 2 --retry-delay 8 --max-time 180 \
             -X POST "$SERVICE_URL/internal/collect-all" \
             -H "Authorization: Bearer $CRON_SECRET"
-

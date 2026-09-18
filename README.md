@@ -1,7 +1,8 @@
 # Channel Radar
 
-> **Live service:** deployment in progress  
-> **Repository:** this repository
+> **Live service:** https://channel-radar-6kls.onrender.com
+>
+> **Repository:** https://github.com/Vladislav200603/channel-radar
 
 Живий сервіс аналітики публічних Telegram-каналів. Користувач додає username у браузері,
 сервіс збирає останні пости з анонімного `t.me/s/<channel>`, зберігає часові зрізи метрик,

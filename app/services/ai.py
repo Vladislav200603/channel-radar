@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -7,6 +8,8 @@ import httpx
 
 from app.config import get_settings
 from app.models import Post
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -77,6 +80,13 @@ class GeminiDigestService:
                 return DigestResult(
                     False,
                     error="AI досяг ліміту запитів. Спробуйте пізніше; інші дані доступні.",
+                )
+            if not response.is_success:
+                provider_message = response.text.replace(self.api_key, "[redacted]")[:1000]
+                logger.warning(
+                    "Gemini request failed with status %s: %s",
+                    response.status_code,
+                    provider_message,
                 )
             response.raise_for_status()
             data = response.json()

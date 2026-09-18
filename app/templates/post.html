@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Пост #{{ post.telegram_post_id }} · Channel Radar{% endblock %}
+{% block content %}
+<nav class="breadcrumbs"><a href="/">Канали</a><span>/</span><a href="/channels/{{ channel.username }}">@{{ channel.username }}</a><span>/</span><span>#{{ post.telegram_post_id }}</span></nav>
+<section class="post-header">
+  <div><span class="eyebrow">POST DETAIL</span><h1>Пост #{{ post.telegram_post_id }}</h1><p>{{ post.published_at|datetime }}</p></div>
+  <a class="button button-secondary" href="{{ post.url }}" target="_blank" rel="noopener">Відкрити оригінал ↗</a>
+</section>
+<article class="post-body">
+  {% if post.text %}{{ post.text }}{% else %}<span class="muted">Текст відсутній · {{ post.media_kind or 'медіапост' }}</span>{% endif %}
+</article>
+<section class="chart-card full-width">
+  <div class="card-heading"><div><span class="eyebrow">METRIC HISTORY</span><h2>Динаміка поста</h2></div><span>{{ snapshots|length }} точок</span></div>
+  <div class="chart-wrap chart-wrap-tall"><canvas id="post-chart"></canvas></div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+const postData = {{ chart_data|tojson }};
+window.addEventListener('DOMContentLoaded', () => {
+  if (!window.Chart) return;
+  new Chart(document.getElementById('post-chart'), {type: 'line', data: {labels: postData.labels, datasets: [
+    {label: 'Перегляди', data: postData.views, borderColor: '#7c8cff', tension: .3},
+    {label: 'Реакції', data: postData.reactions, borderColor: '#45e0b7', tension: .3}
+  ]}, options: {responsive: true, maintainAspectRatio: false, interaction: {intersect: false, mode: 'index'}, plugins: {legend: {labels: {color: '#c8d0e0'}}}, scales: {x: {grid: {display: false}, ticks: {color: '#8993a8'}}, y: {grid: {color: 'rgba(255,255,255,.07)'}, ticks: {color: '#8993a8'}}}}});
+});
+</script>
+{% endblock %}
+

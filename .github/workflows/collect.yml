@@ -1,0 +1,27 @@
+name: Collect channel updates
+
+on:
+  schedule:
+    - cron: "17,47 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Wake service and collect
+        env:
+          SERVICE_URL: ${{ vars.CHANNEL_RADAR_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          test -n "$SERVICE_URL"
+          test -n "$CRON_SECRET"
+          curl --fail --show-error --silent \
+            --retry 2 --retry-delay 8 --max-time 180 \
+            -X POST "$SERVICE_URL/internal/collect-all" \
+            -H "Authorization: Bearer $CRON_SECRET"
+

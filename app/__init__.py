@@ -1,0 +1,1 @@
+"""Channel Radar application package."""

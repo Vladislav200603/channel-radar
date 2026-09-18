@@ -1,0 +1,20 @@
+[project]
+name = "channel-radar"
+version = "0.1.0"
+description = "Live analytics dashboard for public Telegram channels"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+addopts = "-q --disable-socket --allow-hosts=127.0.0.1,::1"
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+"app/main.py" = ["B008"]

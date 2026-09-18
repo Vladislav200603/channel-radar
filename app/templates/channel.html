@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}{{ channel.title or ('@' ~ channel.username) }} · Channel Radar{% endblock %}
+{% block content %}
+<nav class="breadcrumbs"><a href="/">Канали</a><span>/</span><span>@{{ channel.username }}</span></nav>
+
+<section class="channel-hero">
+  <div class="channel-identity">
+    <div class="avatar avatar-large">{{ (channel.title or channel.username)[:1]|upper }}</div>
+    <div>
+      <div class="title-line">
+        <h1>{{ channel.title or ('@' ~ channel.username) }}</h1>
+        <span id="channel-status" class="status status-{{ channel.status }}"><i></i>{{ channel.status }}</span>
+      </div>
+      <p class="handle">@{{ channel.username }}</p>
+      {% if channel.description %}<p class="description">{{ channel.description }}</p>{% endif %}
+    </div>
+  </div>
+  <form action="/channels/{{ channel.username }}/refresh" method="post">
+    <button class="button button-secondary" type="submit">Оновити зараз</button>
+  </form>
+</section>
+
+{% if channel.status in ['pending', 'collecting'] %}
+<div id="collection-notice" class="notice notice-progress">
+  <span class="spinner"></span>
+  <div><strong>Збираємо перші дані</strong><br><span>Канал уже додано. Це зазвичай займає кілька секунд.</span></div>
+</div>
+{% elif channel.status == 'degraded' %}
+<div class="notice notice-warning"><strong>Канал працює, історія наздоганяється.</strong> Нові пости вже доступні; наступний фоновий збір продовжить backfill без втрати даних.</div>
+{% elif channel.status == 'error' %}
+<div class="notice notice-error"><strong>Не вдалося оновити канал.</strong> {{ channel.last_error }}<br><span>Остання спроба: {{ channel.last_attempt_at|datetime }}</span></div>
+{% endif %}
+
+<div class="stats-grid">
+  <article class="stat-card"><span>Підписники</span><strong>{{ channel.subscriber_count|compact_number }}</strong><small>остання видима оцінка</small></article>
+  <article class="stat-card"><span>Пости у вибірці</span><strong>{{ posts|length }}</strong><small>за {{ days }} днів</small></article>
+  <article class="stat-card"><span>Останній збір</span><strong class="stat-date">{{ channel.last_collected_at|datetime }}</strong><small>UTC</small></article>
+</div>
+
+<div class="toolbar">
+  <div class="period-tabs" aria-label="Період">
+    {% for option in [7, 30, 90, 365] %}
+      <a class="period-tab {% if days == option %}active{% endif %}" href="?days={{ option }}">{% if option == 365 %}1 рік{% else %}{{ option }} днів{% endif %}</a>
+    {% endfor %}
+  </div>
+</div>
+
+<section class="dashboard-layout">
+  <div class="chart-card">
+    <div class="card-heading"><div><span class="eyebrow">TREND</span><h2>Підписники</h2></div></div>
+    <div class="chart-wrap"><canvas id="subscribers-chart"></canvas></div>
+  </div>
+  <div class="chart-card">
+    <div class="card-heading"><div><span class="eyebrow">VISIBLE SAMPLE</span><h2>Середні перегляди / пост</h2></div></div>
+    <div class="chart-wrap"><canvas id="views-chart"></canvas></div>
+  </div>
+</section>
+
+<section class="ai-card">
+  <div class="ai-card-head">
+    <div class="ai-badge">AI</div>
+    <div><span class="eyebrow">7-DAY DIGEST</span><h2>Про що писав канал</h2></div>
+    <form action="/channels/{{ channel.username }}/digest" method="post">
+      <button class="button button-primary" type="submit">{% if digest %}Оновити дайджест{% else %}Створити дайджест{% endif %}</button>
+    </form>
+  </div>
+  {% if ai_error %}<div class="notice notice-warning">{{ ai_error }}</div>{% endif %}
+  {% if digest %}
+    <div class="digest-content">{{ digest.content }}</div>
+    <small>Gemini · {{ digest.model }} · {{ digest.created_at|datetime }}</small>
+  {% else %}
+    <p class="muted">AI не входить у критичний шлях збору. Створіть змістовний дайджест за останні сім днів, коли дані вже зібрані.</p>
+  {% endif %}
+</section>
+
+<section class="table-card">
+  <div class="card-heading"><div><span class="eyebrow">CONTENT FEED</span><h2>Останні пости</h2></div><span>{{ posts|length }} записів</span></div>
+  {% if posts %}
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Пост</th><th>Дата</th><th>Перегляди</th><th>Реакції</th><th>Сигнал</th></tr></thead>
+      <tbody>
+      {% for row in posts %}
+        <tr>
+          <td><a class="post-link" href="/channels/{{ channel.username }}/posts/{{ row.post.telegram_post_id }}"><span>#{{ row.post.telegram_post_id }}</span>{{ row.post.text[:110] or ('[' ~ (row.post.media_kind or 'без тексту') ~ ']') }}{% if row.post.text|length > 110 %}…{% endif %}</a></td>
+          <td>{{ row.post.published_at|datetime }}</td>
+          <td class="numeric">{{ row.views|compact_number }}</td>
+          <td class="numeric">{{ row.reactions_total|compact_number }}</td>
+          <td>{% if row.is_anomaly %}<span class="signal signal-hot">↑ {{ row.view_multiplier }}×</span>{% else %}<span class="signal">норма</span>{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}<div class="empty-inline">За вибраний період постів поки немає.</div>{% endif %}
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const chartData = {{ chart_data|tojson }};
+  const commonOptions = {
+    responsive: true, maintainAspectRatio: false,
+    interaction: {intersect: false, mode: 'index'},
+    plugins: {legend: {display: false}, tooltip: {backgroundColor: '#111827', padding: 12}},
+    scales: {
+      x: {grid: {display: false}, ticks: {color: '#8993a8', maxTicksLimit: 6}},
+      y: {grid: {color: 'rgba(255,255,255,.07)'}, ticks: {color: '#8993a8'}}
+    }
+  };
+  window.addEventListener('DOMContentLoaded', () => {
+    if (window.Chart) {
+      new Chart(document.getElementById('subscribers-chart'), {type: 'line', data: {labels: chartData.subscribers.labels, datasets: [{data: chartData.subscribers.values, borderColor: '#7c8cff', backgroundColor: 'rgba(124,140,255,.13)', fill: true, tension: .35, pointRadius: 3}]}, options: commonOptions});
+      new Chart(document.getElementById('views-chart'), {type: 'line', data: {labels: chartData.views.labels, datasets: [{data: chartData.views.values, borderColor: '#45e0b7', backgroundColor: 'rgba(69,224,183,.12)', fill: true, tension: .35, pointRadius: 3}]}, options: commonOptions});
+    }
+    {% if start_collect %}
+    const notice = document.getElementById('collection-notice');
+    fetch('/channels/{{ channel.username }}/collect', {method: 'POST'})
+      .then(async response => {
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || 'Помилка збору');
+        window.location.replace('/channels/{{ channel.username }}');
+      })
+      .catch(error => {
+        notice.className = 'notice notice-error';
+        const heading = document.createElement('strong');
+        heading.textContent = 'Не вдалося зібрати дані.';
+        notice.replaceChildren(heading, document.createTextNode(' ' + error.message));
+      });
+    {% endif %}
+  });
+</script>
+{% endblock %}

@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Channel Radar · Огляд{% endblock %}
+{% block content %}
+<section class="hero">
+  <div>
+    <span class="eyebrow">LIVE TELEGRAM ANALYTICS</span>
+    <h1>Сигнали каналів<br><span>без шуму.</span></h1>
+    <p>Додайте публічний Telegram-канал. Radar збере пости, збереже динаміку метрик і підготує AI-дайджест.</p>
+  </div>
+  <form class="add-channel-card" action="/channels" method="post">
+    <label for="channel">Додати канал</label>
+    <div class="input-row">
+      <div class="input-prefix">@</div>
+      <input id="channel" name="channel" placeholder="durov" autocomplete="off" required maxlength="64">
+      <button class="button button-primary" type="submit">Сканувати</button>
+    </div>
+    <small>Публічний username або посилання t.me · до {{ channel_limit }} каналів</small>
+  </form>
+</section>
+
+{% if error %}
+<div class="notice notice-error" role="alert">{{ error }}</div>
+{% endif %}
+
+<section class="section-heading">
+  <div>
+    <span class="eyebrow">WORKSPACE</span>
+    <h2>Канали</h2>
+  </div>
+  <span class="count-pill">{{ channels|length }} / {{ channel_limit }}</span>
+</section>
+
+{% if channels %}
+<div class="channel-grid">
+  {% for row in channels %}
+  <a class="channel-card" href="/channels/{{ row.channel.username }}">
+    <div class="channel-card-top">
+      <div class="avatar">{{ (row.channel.title or row.channel.username)[:1]|upper }}</div>
+      <span class="status status-{{ row.display_status }}"><i></i>{{ row.display_status }}</span>
+    </div>
+    <div>
+      <h3>{{ row.channel.title or ('@' ~ row.channel.username) }}</h3>
+      <span class="handle">@{{ row.channel.username }}</span>
+    </div>
+    <div class="metric-row">
+      <div><strong>{{ row.channel.subscriber_count|compact_number }}</strong><span>підписники</span></div>
+      <div><strong>{{ row.post_count }}</strong><span>пости</span></div>
+    </div>
+    <div class="card-footer">
+      <span>Оновлено {{ row.channel.last_collected_at|datetime }}</span>
+      <span class="arrow">↗</span>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+  <div class="radar-icon"><span></span></div>
+  <h3>Radar очікує перший сигнал</h3>
+  <p>Додайте @durov або інший публічний канал у формі вище.</p>
+</div>
+{% endif %}
+{% endblock %}
+

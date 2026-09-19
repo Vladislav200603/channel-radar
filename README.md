@@ -64,6 +64,7 @@ production завжди використовує зовнішній PostgreSQL �
 | `CRON_SECRET` | так | довгий випадковий секрет для внутрішнього collect endpoint |
 | `GEMINI_API_KEY` | для AI | ключ Google AI Studio, ніколи не зберігається в git |
 | `GEMINI_MODEL` | ні | за замовчуванням `gemini-3.8-flash` |
+| `GEMINI_FALLBACK_MODEL` | ні | резервна модель, за замовчуванням `gemini-3.5-flash-lite` |
 | `BASE_URL` | так | публічний URL сервісу |
 | `COLLECTION_BUCKET_MINUTES` | ні | ширина idempotency bucket, за замовчуванням 60 хв |
 

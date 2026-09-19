@@ -36,6 +36,75 @@ async def test_gemini_success_is_mocked_without_network() -> None:
     )
     assert result.ok is True
     assert result.content == "Короткий дайджест"
+    assert result.model == "gemini-3.8-flash"
+
+
+@pytest.mark.asyncio
+async def test_gemini_retries_transient_failure() -> None:
+    calls = 0
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return httpx.Response(503, json={"error": "high demand"})
+        return httpx.Response(
+            200,
+            json={"candidates": [{"content": {"parts": [{"text": "Дайджест після повтору"}]}}]},
+        )
+
+    service = GeminiDigestService(
+        api_key="test-key",
+        retry_delays=(0,),
+        transport=httpx.MockTransport(handler),
+    )
+    result = await service.generate(
+        "Example",
+        [sample_post()],
+        datetime(2026, 9, 10, tzinfo=UTC),
+        datetime(2026, 9, 16, tzinfo=UTC),
+    )
+
+    assert result.ok is True
+    assert result.content == "Дайджест після повтору"
+    assert calls == 2
+
+
+@pytest.mark.asyncio
+async def test_gemini_uses_fallback_model_after_transient_failures() -> None:
+    requested_models: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requested_models.append(request.url.path)
+        if "gemini-primary" in request.url.path:
+            return httpx.Response(503, json={"error": "high demand"})
+        return httpx.Response(
+            200,
+            json={"candidates": [{"content": {"parts": [{"text": "Резервний дайджест"}]}}]},
+        )
+
+    service = GeminiDigestService(
+        api_key="test-key",
+        model="gemini-primary",
+        fallback_model="gemini-fallback",
+        retry_delays=(0,),
+        transport=httpx.MockTransport(handler),
+    )
+    result = await service.generate(
+        "Example",
+        [sample_post()],
+        datetime(2026, 9, 10, tzinfo=UTC),
+        datetime(2026, 9, 16, tzinfo=UTC),
+    )
+
+    assert result.ok is True
+    assert result.content == "Резервний дайджест"
+    assert result.model == "gemini-fallback"
+    assert requested_models == [
+        "/v1beta/models/gemini-primary:generateContent",
+        "/v1beta/models/gemini-primary:generateContent",
+        "/v1beta/models/gemini-fallback:generateContent",
+    ]
 
 
 @pytest.mark.asyncio

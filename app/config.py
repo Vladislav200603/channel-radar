@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     cron_secret: str = ""
     gemini_api_key: str = ""
     gemini_model: str = "gemini-3.8-flash"
+    gemini_fallback_model: str = "gemini-3.5-flash-lite"
     telegram_timeout_seconds: float = Field(default=15.0, ge=3.0, le=60.0)
     collection_bucket_minutes: int = Field(default=60, ge=5, le=1440)
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import datetime
@@ -17,6 +18,7 @@ class DigestResult:
     ok: bool
     content: str = ""
     error: str | None = None
+    model: str | None = None
 
 
 class GeminiDigestService:
@@ -25,12 +27,27 @@ class GeminiDigestService:
         *,
         api_key: str | None = None,
         model: str | None = None,
+        fallback_model: str | None = None,
+        retry_delays: tuple[float, ...] = (1.0,),
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         settings = get_settings()
         self.api_key = api_key if api_key is not None else settings.gemini_api_key
         self.model = model or settings.gemini_model
+        self.fallback_model = (
+            fallback_model if fallback_model is not None else settings.gemini_fallback_model
+        )
+        self.retry_delays = retry_delays
         self.transport = transport
+
+    @property
+    def models(self) -> tuple[str, ...]:
+        candidates = (self.model, self.fallback_model)
+        return tuple(
+            candidate
+            for index, candidate in enumerate(candidates)
+            if candidate and candidate not in candidates[:index]
+        )
 
     def _prompt(
         self,
@@ -64,38 +81,65 @@ class GeminiDigestService:
         if not posts:
             return DigestResult(False, error="За вибраний період немає постів для дайджесту.")
 
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent"
         payload = {
             "contents": [{"parts": [{"text": self._prompt(channel_title, posts, period_start, period_end)}]}],
             "generationConfig": {"temperature": 0.2, "maxOutputTokens": 700},
         }
-        try:
-            async with httpx.AsyncClient(transport=self.transport, timeout=35.0) as client:
-                response = await client.post(
-                    url,
-                    headers={"x-goog-api-key": self.api_key},
-                    json=payload,
-                )
-            if response.status_code == 429:
-                return DigestResult(
-                    False,
-                    error="AI досяг ліміту запитів. Спробуйте пізніше; інші дані доступні.",
-                )
-            if not response.is_success:
-                provider_message = response.text.replace(self.api_key, "[redacted]")[:1000]
-                logger.warning(
-                    "Gemini request failed with status %s: %s",
-                    response.status_code,
-                    provider_message,
-                )
-            response.raise_for_status()
-            data = response.json()
-            content = data["candidates"][0]["content"]["parts"][0]["text"].strip()
-            if not content:
-                raise ValueError("empty AI response")
-            return DigestResult(True, content=content)
-        except (httpx.HTTPError, KeyError, IndexError, ValueError):
+        transient_statuses = {408, 429, 500, 502, 503, 504}
+        last_status: int | None = None
+
+        async with httpx.AsyncClient(transport=self.transport, timeout=35.0) as client:
+            for model in self.models:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+                for attempt in range(len(self.retry_delays) + 1):
+                    try:
+                        response = await client.post(
+                            url,
+                            headers={"x-goog-api-key": self.api_key},
+                            json=payload,
+                        )
+                        last_status = response.status_code
+                        if not response.is_success:
+                            provider_message = response.text.replace(self.api_key, "[redacted]")[:1000]
+                            logger.warning(
+                                "Gemini model %s failed with status %s (attempt %s): %s",
+                                model,
+                                response.status_code,
+                                attempt + 1,
+                                provider_message,
+                            )
+                            if response.status_code not in transient_statuses:
+                                return DigestResult(
+                                    False,
+                                    error=(
+                                        "AI не відповів, але дашборд продовжує працювати. "
+                                        "Спробуйте пізніше."
+                                    ),
+                                )
+                        else:
+                            data = response.json()
+                            parts = data["candidates"][0]["content"]["parts"]
+                            content = "\n".join(part.get("text", "") for part in parts).strip()
+                            if not content:
+                                raise ValueError("empty AI response")
+                            return DigestResult(True, content=content, model=model)
+                    except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError) as exc:
+                        logger.warning(
+                            "Gemini model %s failed on attempt %s: %s",
+                            model,
+                            attempt + 1,
+                            type(exc).__name__,
+                        )
+
+                    if attempt < len(self.retry_delays):
+                        await asyncio.sleep(self.retry_delays[attempt])
+
+        if last_status == 429:
             return DigestResult(
                 False,
-                error="AI не відповів, але дашборд продовжує працювати. Спробуйте пізніше.",
+                error="AI досяг ліміту запитів. Спробуйте пізніше; інші дані доступні.",
             )
+        return DigestResult(
+            False,
+            error="AI не відповів, але дашборд продовжує працювати. Спробуйте пізніше.",
+        )

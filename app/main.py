@@ -282,7 +282,7 @@ async def generate_digest(username: str, db: Session = Depends(get_db)):
                     period_end=period_end,
                     content=result.content,
                     provider="google",
-                    model=settings.gemini_model,
+                    model=result.model or settings.gemini_model,
                 )
             )
             db.commit()

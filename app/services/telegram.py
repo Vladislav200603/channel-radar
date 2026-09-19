@@ -298,9 +298,27 @@ async def fetch_channel(
         response = await _fetch_page(client, f"https://t.me{first_path}")
         parsed = _parse_response(response, normalized)
 
+        latest_post_ids = {post.telegram_post_id for post in parsed.posts}
+        overlaps_database = bool(known_post_ids and latest_post_ids.intersection(known_post_ids))
+
+        # Keep the first scan fast, but remember Telegram's previous-page cursor so
+        # later scheduled runs can grow the local history beyond the ~20-post preview.
+        # The second branch also bootstraps channels created before this behaviour was
+        # introduced, while their database still contains only one preview window.
+        initial_window_only = not known_post_ids or (
+            start_page is None
+            and overlaps_database
+            and len(known_post_ids) <= len(parsed.posts)
+        )
+        if start_page is None and initial_window_only and parsed.previous_page is not None:
+            if not _validate_page_path(parsed.previous_page, normalized):
+                raise ChannelUnavailable("Telegram повернув небезпечний cursor пагінації")
+            parsed.history_complete = False
+            parsed.resume_cursor = parsed.previous_page
+
         # Normally the latest page already overlaps our database. If more than ~20
         # messages appeared between runs, follow Telegram's own cursor until overlap.
-        if not known_post_ids or any(post.telegram_post_id in known_post_ids for post in parsed.posts):
+        if not known_post_ids or overlaps_database:
             return parsed
         all_posts = list(parsed.posts)
         previous_page = parsed.previous_page

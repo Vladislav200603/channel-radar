@@ -107,6 +107,38 @@ def telegram_page(post_ids: list[int], previous_page: str | None) -> str:
 
 
 @pytest.mark.asyncio
+async def test_first_scan_saves_cursor_for_gradual_history_backfill() -> None:
+    page = telegram_page([300, 299], "/s/durov?before=299")
+    transport = httpx.MockTransport(
+        lambda _: httpx.Response(200, text=page, headers={"content-type": "text/html"})
+    )
+
+    parsed = await fetch_channel("durov", transport=transport)
+
+    assert parsed.history_complete is False
+    assert parsed.resume_cursor == "/s/durov?before=299"
+    assert {post.telegram_post_id for post in parsed.posts} == {300, 299}
+
+
+@pytest.mark.asyncio
+async def test_existing_single_preview_window_is_enrolled_in_backfill() -> None:
+    page = telegram_page([301, 300], "/s/durov?before=300")
+    transport = httpx.MockTransport(
+        lambda _: httpx.Response(200, text=page, headers={"content-type": "text/html"})
+    )
+
+    parsed = await fetch_channel(
+        "durov",
+        known_post_ids={300, 299},
+        transport=transport,
+    )
+
+    assert parsed.history_complete is False
+    assert parsed.resume_cursor == "/s/durov?before=300"
+    assert {post.telegram_post_id for post in parsed.posts} == {301, 300}
+
+
+@pytest.mark.asyncio
 async def test_pagination_returns_resumable_cursor_instead_of_silent_gap() -> None:
     pages = {
         "/s/durov": telegram_page([300, 299], "/s/durov?before=299"),

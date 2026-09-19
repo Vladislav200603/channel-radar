@@ -44,7 +44,7 @@
     </div>
     <div class="metric-row">
       <div><strong>{{ row.channel.subscriber_count|compact_number }}</strong><span>підписники</span></div>
-      <div><strong>{{ row.post_count }}</strong><span>пости</span></div>
+      <div><strong>{{ row.post_count }}</strong><span>пости в базі</span></div>
     </div>
     <div class="card-footer">
       <span>Оновлено {{ row.channel.last_collected_at|datetime }}</span>
@@ -61,4 +61,3 @@
 </div>
 {% endif %}
 {% endblock %}
-

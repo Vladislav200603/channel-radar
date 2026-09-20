@@ -12,6 +12,8 @@
   --radius: 18px;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
+.feed-note { padding: 0 22px; }
 html { background: var(--bg); }
 body { margin: 0; min-height: 100vh; color: var(--text); background: radial-gradient(circle at 50% -20%, #18203d 0, var(--bg) 38%); font-family: Inter, system-ui, sans-serif; line-height: 1.55; }
 a { color: inherit; text-decoration: none; }
@@ -43,6 +45,22 @@ h1, h2, h3 { margin: 0; font-family: "Space Grotesk", Inter, sans-serif; letter-
 .button-primary { color: #07100d; background: linear-gradient(135deg, var(--accent-2), #8cf3d8); }
 .input-row .button { margin: 5px; }
 .button-secondary { color: var(--text); border: 1px solid var(--border); background: rgba(255,255,255,.05); }
+.button:disabled { opacity: .6; cursor: wait; transform: none; }
+.button-danger { color: #260a10; background: #ff8d9e; }
+.button-danger-outline { color: #ffb3bf; border: 1px solid rgba(255,113,135,.35); background: transparent; }
+.channel-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.channel-actions form { margin: 0; }
+.channel-card-link { display: block; }
+.card-actions { display: flex; justify-content: flex-end; padding-top: 14px; }
+.delete-link { color: #e497a6; font-size: 12px; }
+.delete-link:hover { text-decoration: underline; }
+.delete-card { max-width: 720px; margin: 30px auto; padding: 30px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); }
+.delete-card h1 { font-size: 36px; margin: 8px 0 26px; }
+.delete-card h2 { overflow-wrap: anywhere; }
+.notice-success { color: #aeffe6; border-color: rgba(69,224,183,.33); background: rgba(69,224,183,.08); }
+.coverage-note { color: var(--muted); font-size: 12px; }
+.pagination { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 20px; }
+.pagination > span { color: var(--muted); font-size: 13px; }
 .notice { margin: 18px 0; padding: 15px 17px; border: 1px solid; border-radius: 12px; font-size: 14px; }
 .notice-error { color: #ffd9df; border-color: rgba(255,113,135,.35); background: rgba(255,113,135,.10); }
 .notice-warning { color: #ffe7b7; border-color: rgba(255,199,102,.33); background: rgba(255,199,102,.09); }

@@ -23,8 +23,10 @@
 5. Tests не звертаються в мережу. Telegram — fixtures, Gemini — mock transport.
 6. Secrets тільки в environment. Не логувати API keys, DB URL або cron token.
 7. Зміна schema завжди має Alembic migration.
-8. Великий history gap має завершуватися через збережений same-origin cursor до того,
-   як collector відкриє наступний gap; `degraded` тут означає доступні дані + активний backfill.
+8. Кожний збір спочатку зберігає свіже preview-вікно. Recent gaps мають окремі cursor,
+   фіксовану нижню межу ID та чергу; архів має незалежний cursor і ніколи не завершується
+   лише через знайомий post ID. Архівні помилки не скасовують свіжі дані. `degraded`
+   означає незавершений recent gap; archive progress/error показуються окремо.
 
 ## Перед завершенням зміни
 

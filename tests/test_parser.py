@@ -121,7 +121,7 @@ async def test_first_scan_saves_cursor_for_gradual_history_backfill() -> None:
 
 
 @pytest.mark.asyncio
-async def test_existing_single_preview_window_is_enrolled_in_backfill() -> None:
+async def test_archival_fetch_does_not_stop_on_known_posts() -> None:
     page = telegram_page([301, 300], "/s/durov?before=300")
     transport = httpx.MockTransport(
         lambda _: httpx.Response(200, text=page, headers={"content-type": "text/html"})
@@ -130,12 +130,70 @@ async def test_existing_single_preview_window_is_enrolled_in_backfill() -> None:
     parsed = await fetch_channel(
         "durov",
         known_post_ids={300, 299},
+        full_history=True,
         transport=transport,
     )
 
     assert parsed.history_complete is False
     assert parsed.resume_cursor == "/s/durov?before=300"
     assert {post.telegram_post_id for post in parsed.posts} == {301, 300}
+
+
+@pytest.mark.asyncio
+async def test_archive_continues_past_overlap_on_resumed_page() -> None:
+    pages = {
+        "/s/durov?before=300": telegram_page([299, 298], "/s/durov?before=298"),
+        "/s/durov?before=298": telegram_page([297, 296], "/s/durov?before=296"),
+    }
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        key = request.url.path + "?" + request.url.query.decode()
+        calls.append(key)
+        return httpx.Response(200, text=pages[key], headers={"content-type": "text/html"})
+
+    parsed = await fetch_channel(
+        "durov",
+        known_post_ids={300, 299},
+        start_page="/s/durov?before=300",
+        full_history=True,
+        max_pages=2,
+        transport=httpx.MockTransport(handler),
+    )
+
+    assert len(calls) == 2
+    assert {post.telegram_post_id for post in parsed.posts} == {299, 298, 297, 296}
+    assert not parsed.history_complete
+    assert parsed.resume_cursor == "/s/durov?before=296"
+
+
+@pytest.mark.asyncio
+async def test_recent_gap_passes_deleted_boundary_post() -> None:
+    page = telegram_page([103, 99], "/s/durov?before=99")
+    parsed = await fetch_channel(
+        "durov",
+        stop_at_post_id=100,
+        start_page="/s/durov?before=104",
+        transport=httpx.MockTransport(
+            lambda _: httpx.Response(200, text=page, headers={"content-type": "text/html"})
+        ),
+    )
+    assert parsed.history_complete
+    assert parsed.resume_cursor is None
+
+
+@pytest.mark.asyncio
+async def test_repeating_pagination_cursor_is_rejected() -> None:
+    page = telegram_page([103, 102], "/s/durov?before=104")
+    with pytest.raises(ChannelUnavailable, match="повторний cursor"):
+        await fetch_channel(
+            "durov",
+            start_page="/s/durov?before=104",
+            full_history=True,
+            transport=httpx.MockTransport(
+                lambda _: httpx.Response(200, text=page, headers={"content-type": "text/html"})
+            ),
+        )
 
 
 @pytest.mark.asyncio

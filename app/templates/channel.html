@@ -9,31 +9,46 @@
     <div>
       <div class="title-line">
         <h1>{{ channel.title or ('@' ~ channel.username) }}</h1>
-        <span id="channel-status" class="status status-{{ channel.status }}"><i></i>{{ channel.status }}</span>
+        <span id="channel-status" class="status status-{{ display_status }}"><i></i>{{ display_status }}</span>
       </div>
       <p class="handle">@{{ channel.username }}</p>
       {% if channel.description %}<p class="description">{{ channel.description }}</p>{% endif %}
     </div>
   </div>
-  <form action="/channels/{{ channel.username }}/refresh" method="post">
-    <button class="button button-secondary" type="submit">Оновити зараз</button>
-  </form>
+  <div class="channel-actions">
+    <form id="refresh-form" action="/channels/{{ channel.username }}/refresh" method="post">
+      <input type="hidden" name="days" value="{{ days }}">
+      <button class="button button-secondary" type="submit">Оновити зараз</button>
+    </form>
+    <a class="button button-danger-outline" href="/channels/{{ channel.username }}/delete">Видалити канал</a>
+  </div>
 </section>
+
+<div id="refresh-notice" class="notice notice-progress" role="status" hidden>Оновлюємо дані каналу…</div>
 
 {% if channel.status in ['pending', 'collecting'] %}
 <div id="collection-notice" class="notice notice-progress">
   <span class="spinner"></span>
-  <div><strong>Збираємо перші дані</strong><br><span>Канал уже додано. Це зазвичай займає кілька секунд.</span></div>
+  <div><strong>{% if channel.last_collected_at %}Оновлюємо дані{% else %}Збираємо перші дані{% endif %}</strong><br><span>Канал уже додано. Це зазвичай займає кілька секунд.</span></div>
 </div>
 {% elif channel.status == 'degraded' %}
-<div class="notice notice-warning"><strong>Канал працює, історія наздоганяється.</strong> Нові пости вже доступні; наступний фоновий збір продовжить backfill без втрати даних.</div>
+<div class="notice notice-warning"><strong>Наздоганяємо пропущені публікації.</strong> Найновіші пости вже перевірено; прогалини між попередніми зборами заповнюються частинами.</div>
 {% elif channel.status == 'error' %}
 <div class="notice notice-error"><strong>Не вдалося оновити канал.</strong> {{ channel.last_error }}<br><span>Остання спроба: {{ channel.last_attempt_at|datetime }}</span></div>
+{% endif %}
+{% if channel.last_collected_at and (not channel.archive_initialized or channel.archive_cursor) %}
+<div class="notice notice-progress"><strong>Архів завантажується поступово.</strong> Свіжі пости перевіряються окремо при кожному оновленні. Лічильник відображає тільки вже збережені публікації.</div>
+{% endif %}
+{% if channel.archive_error %}
+<div class="notice notice-warning">Дозавантаження архіву тимчасово призупинено через помилку джерела. Зібрані дані збережено; спроба повториться при наступному оновленні.</div>
+{% endif %}
+{% if display_status == 'stale' %}
+<div class="notice notice-warning">Дані не оновлювалися понад три години. Натисніть «Оновити зараз», щоб отримати актуальні публікації.</div>
 {% endif %}
 
 <div class="stats-grid">
   <article class="stat-card"><span>Підписники</span><strong>{{ channel.subscriber_count|compact_number }}</strong><small>остання видима оцінка</small></article>
-  <article class="stat-card"><span>Пости у вибірці</span><strong>{{ posts|length }}</strong><small>за {{ days }} днів</small></article>
+  <article class="stat-card"><span>Пости в базі за період</span><strong>{{ total_posts }}</strong><small>за {{ days }} днів</small></article>
   <article class="stat-card"><span>Останній збір</span><strong class="stat-date">{{ channel.last_collected_at|datetime }}</strong><small>UTC</small></article>
 </div>
 
@@ -44,6 +59,7 @@
     {% endfor %}
   </div>
 </div>
+<p class="coverage-note">Показано зібрані публікації. Історичні значення підписників і переглядів доступні лише з моменту спостереження.</p>
 
 <section class="dashboard-layout">
   <div class="chart-card">
@@ -51,7 +67,8 @@
     <div class="chart-wrap"><canvas id="subscribers-chart"></canvas></div>
   </div>
   <div class="chart-card">
-    <div class="card-heading"><div><span class="eyebrow">VISIBLE SAMPLE</span><h2>Середні перегляди / пост</h2></div></div>
+    <div class="card-heading"><div><span class="eyebrow">ОСТАННІ ПУБЛІКАЦІЇ</span><h2>Середні перегляди / пост</h2></div></div>
+    <p class="coverage-note">Середнє для свіжої сторінки каналу на час збору. Дозавантаження архіву не змінює цей показник.</p>
     <div class="chart-wrap"><canvas id="views-chart"></canvas></div>
   </div>
 </section>
@@ -60,21 +77,23 @@
   <div class="ai-card-head">
     <div class="ai-badge">AI</div>
     <div><span class="eyebrow">7-DAY DIGEST</span><h2>Про що писав канал</h2></div>
-    <form action="/channels/{{ channel.username }}/digest" method="post">
+    <form id="digest-form" action="/channels/{{ channel.username }}/digest" method="post">
       <button class="button button-primary" type="submit">{% if digest %}Оновити дайджест{% else %}Створити дайджест{% endif %}</button>
     </form>
   </div>
+  <p class="coverage-note">За текстом до 40 останніх зібраних постів за сім днів. Відео та голосові повідомлення не розшифровуються.</p>
   {% if ai_error %}<div class="notice notice-warning">{{ ai_error }}</div>{% endif %}
   {% if digest %}
     <div class="digest-content">{{ digest.content }}</div>
     <small>Gemini · {{ digest.model }} · {{ digest.created_at|datetime }}</small>
   {% else %}
-    <p class="muted">AI не входить у критичний шлях збору. Створіть змістовний дайджест за останні сім днів, коли дані вже зібрані.</p>
+    <p class="muted">Створіть дайджест за останні сім днів. Підготовка може зайняти до хвилини.</p>
   {% endif %}
 </section>
 
 <section class="table-card">
-  <div class="card-heading"><div><span class="eyebrow">CONTENT FEED</span><h2>Останні пости</h2></div><span>{{ posts|length }} записів</span></div>
+  <div class="card-heading"><div><span class="eyebrow">CONTENT FEED</span><h2>Публікації</h2></div><span>{{ posts|length }} із {{ total_posts }} записів</span></div>
+  <p class="coverage-note feed-note">Сигнал ↑: щонайменше 2× медіани останніх відомих переглядів зібраних постів за вибраний період.</p>
   {% if posts %}
   <div class="table-scroll">
     <table>
@@ -93,6 +112,13 @@
     </table>
   </div>
   {% else %}<div class="empty-inline">За вибраний період постів поки немає.</div>{% endif %}
+  {% if total_pages > 1 %}
+  <nav class="pagination" aria-label="Сторінки публікацій">
+    {% if page > 1 %}<a class="button button-secondary" href="?days={{ days }}&page={{ page - 1 }}">← Новіші</a>{% endif %}
+    <span>Сторінка {{ page }} з {{ total_pages }}</span>
+    {% if page < total_pages %}<a class="button button-secondary" href="?days={{ days }}&page={{ page + 1 }}">Старіші →</a>{% endif %}
+  </nav>
+  {% endif %}
 </section>
 {% endblock %}
 
@@ -109,6 +135,31 @@
     }
   };
   window.addEventListener('DOMContentLoaded', () => {
+    const refreshForm = document.getElementById('refresh-form');
+    refreshForm.addEventListener('submit', async event => {
+      event.preventDefault();
+      const button = refreshForm.querySelector('button');
+      const notice = document.getElementById('refresh-notice');
+      button.disabled = true;
+      button.textContent = 'Оновлюємо…';
+      notice.hidden = false;
+      try {
+        const response = await fetch('/channels/{{ channel.username }}/collect', {method: 'POST'});
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || 'Не вдалося оновити канал. Спробуйте ще раз.');
+        window.location.replace('/channels/{{ channel.username }}?days={{ days }}');
+      } catch (error) {
+        notice.className = 'notice notice-error';
+        notice.textContent = error.message;
+        button.disabled = false;
+        button.textContent = 'Спробувати ще раз';
+      }
+    });
+    document.getElementById('digest-form').addEventListener('submit', event => {
+      const button = event.currentTarget.querySelector('button');
+      button.disabled = true;
+      button.textContent = 'Готуємо дайджест…';
+    });
     if (window.Chart) {
       new Chart(document.getElementById('subscribers-chart'), {type: 'line', data: {labels: chartData.subscribers.labels, datasets: [{data: chartData.subscribers.values, borderColor: '#7c8cff', backgroundColor: 'rgba(124,140,255,.13)', fill: true, tension: .35, pointRadius: 3}]}, options: commonOptions});
       new Chart(document.getElementById('views-chart'), {type: 'line', data: {labels: chartData.views.labels, datasets: [{data: chartData.views.values, borderColor: '#45e0b7', backgroundColor: 'rgba(69,224,183,.12)', fill: true, tension: .35, pointRadius: 3}]}, options: commonOptions});
@@ -127,6 +178,25 @@
         heading.textContent = 'Не вдалося зібрати дані.';
         notice.replaceChildren(heading, document.createTextNode(' ' + error.message));
       });
+    {% endif %}
+    {% if channel.status == 'collecting' and not start_collect %}
+    const pollUntil = Date.now() + 90000;
+    const checkCollection = async () => {
+      try {
+        const response = await fetch('/channels/{{ channel.username }}/status');
+        if (!response.ok) return;
+        const result = await response.json();
+        if (result.status !== 'collecting') {
+          window.location.reload();
+          return;
+        }
+        if (Date.now() < pollUntil) window.setTimeout(checkCollection, 2000);
+        else document.getElementById('collection-notice').textContent = 'Оновлення триває довше очікуваного. Спробуйте «Оновити зараз» пізніше.';
+      } catch (_) {
+        document.getElementById('collection-notice').textContent = 'Не вдалося перевірити оновлення. Оновіть сторінку.';
+      }
+    };
+    window.setTimeout(checkCollection, 2000);
     {% endif %}
   });
 </script>

@@ -21,6 +21,9 @@
 {% if error %}
 <div class="notice notice-error" role="alert">{{ error }}</div>
 {% endif %}
+{% if removed %}
+<div class="notice notice-success" role="status">Канал @{{ removed }} видалено. Місце для нового каналу звільнено.</div>
+{% endif %}
 
 <section class="section-heading">
   <div>
@@ -33,7 +36,8 @@
 {% if channels %}
 <div class="channel-grid">
   {% for row in channels %}
-  <a class="channel-card" href="/channels/{{ row.channel.username }}">
+  <article class="channel-card">
+    <a class="channel-card-link" href="/channels/{{ row.channel.username }}" aria-label="Відкрити @{{ row.channel.username }}">
     <div class="channel-card-top">
       <div class="avatar">{{ (row.channel.title or row.channel.username)[:1]|upper }}</div>
       <span class="status status-{{ row.display_status }}"><i></i>{{ row.display_status }}</span>
@@ -50,7 +54,9 @@
       <span>Оновлено {{ row.channel.last_collected_at|datetime }}</span>
       <span class="arrow">↗</span>
     </div>
-  </a>
+    </a>
+    <div class="card-actions"><a class="delete-link" href="/channels/{{ row.channel.username }}/delete" aria-label="Видалити @{{ row.channel.username }}">Видалити канал</a></div>
+  </article>
   {% endfor %}
 </div>
 {% else %}

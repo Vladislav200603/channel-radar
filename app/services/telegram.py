@@ -273,13 +273,20 @@ async def fetch_channel(
     *,
     timeout_seconds: float = 15.0,
     known_post_ids: set[int] | None = None,
-    max_pages: int = 5,
+    max_pages: int = 1,
     start_page: str | None = None,
+    stop_at_post_id: int | None = None,
+    full_history: bool = False,
+    total_timeout_seconds: float = 25.0,
     transport: httpx.AsyncBaseTransport | None = None,
 ) -> ParsedChannel:
     normalized = normalize_username(username)
+    if max_pages < 1:
+        raise ValueError("max_pages must be positive")
     if start_page is not None and not _validate_page_path(start_page, normalized):
         raise ValueError("invalid Telegram backfill cursor")
+    if stop_at_post_id is None and known_post_ids and not full_history:
+        stop_at_post_id = max(known_post_ids)
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -288,58 +295,47 @@ async def fetch_channel(
         "Accept-Language": "en-US,en;q=0.8",
     }
     timeout = httpx.Timeout(timeout_seconds, connect=min(5.0, timeout_seconds))
-    async with httpx.AsyncClient(
+    async with asyncio.timeout(total_timeout_seconds), httpx.AsyncClient(
         headers=headers,
         follow_redirects=False,
         timeout=timeout,
         transport=transport,
     ) as client:
-        first_path = start_page or f"/s/{normalized}"
-        response = await _fetch_page(client, f"https://t.me{first_path}")
-        parsed = _parse_response(response, normalized)
-
-        latest_post_ids = {post.telegram_post_id for post in parsed.posts}
-        overlaps_database = bool(known_post_ids and latest_post_ids.intersection(known_post_ids))
-
-        # Keep the first scan fast, but remember Telegram's previous-page cursor so
-        # later scheduled runs can grow the local history beyond the ~20-post preview.
-        # The second branch also bootstraps channels created before this behaviour was
-        # introduced, while their database still contains only one preview window.
-        initial_window_only = not known_post_ids or (
-            start_page is None
-            and overlaps_database
-            and len(known_post_ids) <= len(parsed.posts)
-        )
-        if start_page is None and initial_window_only and parsed.previous_page is not None:
-            if not _validate_page_path(parsed.previous_page, normalized):
-                raise ChannelUnavailable("Telegram повернув небезпечний cursor пагінації")
-            parsed.history_complete = False
-            parsed.resume_cursor = parsed.previous_page
-
-        # Normally the latest page already overlaps our database. If more than ~20
-        # messages appeared between runs, follow Telegram's own cursor until overlap.
-        if not known_post_ids or overlaps_database:
-            return parsed
-        all_posts = list(parsed.posts)
-        previous_page = parsed.previous_page
-        overlap_found = False
-        for _ in range(max_pages - 1):
-            if not previous_page:
+        page_path = start_page or f"/s/{normalized}"
+        visited: set[str] = set()
+        posts: dict[int, ParsedPost] = {}
+        parsed: ParsedChannel | None = None
+        previous_page: str | None = None
+        reached_boundary = False
+        for _ in range(max_pages):
+            visited.add(page_path)
+            response = await _fetch_page(client, f"https://t.me{page_path}")
+            current = _parse_response(response, normalized)
+            if parsed is None:
+                parsed = current
+            posts.update((post.telegram_post_id, post) for post in current.posts)
+            previous_page = current.previous_page
+            if previous_page is not None:
+                if not _validate_page_path(previous_page, normalized):
+                    raise ChannelUnavailable("Telegram повернув небезпечний cursor пагінації")
+                if previous_page in visited:
+                    raise ChannelUnavailable("Telegram повернув повторний cursor пагінації")
+                if "?before=" in page_path and int(previous_page.rsplit("=", 1)[1]) >= int(
+                    page_path.rsplit("=", 1)[1]
+                ):
+                    raise ChannelUnavailable("Telegram cursor не просувається до старіших дописів")
+            # A recent gap ends at its original boundary, not at any known post:
+            # a separate archival job may already have stored a disjoint section.
+            reached_boundary = (
+                not full_history
+                and stop_at_post_id is not None
+                and any(post.telegram_post_id <= stop_at_post_id for post in current.posts)
+            )
+            if previous_page is None or reached_boundary:
                 break
-            if not _validate_page_path(previous_page, normalized):
-                raise ChannelUnavailable("Telegram повернув небезпечний cursor пагінації")
-            response = await _fetch_page(client, f"https://t.me{previous_page}")
-            older = _parse_response(response, normalized)
-            all_posts.extend(older.posts)
-            if any(post.telegram_post_id in known_post_ids for post in older.posts):
-                overlap_found = True
-                previous_page = older.previous_page
-                break
-            previous_page = older.previous_page
-        parsed.posts = all_posts
-        if not overlap_found and previous_page is not None:
-            if not _validate_page_path(previous_page, normalized):
-                raise ChannelUnavailable("Telegram повернув небезпечний cursor пагінації")
-            parsed.history_complete = False
-            parsed.resume_cursor = previous_page
+            page_path = previous_page
+        assert parsed is not None
+        parsed.posts = list(posts.values())
+        parsed.history_complete = previous_page is None or reached_boundary
+        parsed.resume_cursor = None if parsed.history_complete else previous_page
         return parsed

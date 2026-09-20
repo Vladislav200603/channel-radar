@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     gemini_fallback_model: str = "gemini-3.5-flash-lite"
     telegram_timeout_seconds: float = Field(default=15.0, ge=3.0, le=60.0)
     collection_bucket_minutes: int = Field(default=60, ge=5, le=1440)
+    scheduler_enabled: bool = False
 
     @property
     def sqlalchemy_database_url(self) -> str:

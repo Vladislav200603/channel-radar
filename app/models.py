@@ -3,7 +3,18 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -25,6 +36,11 @@ class Channel(Base):
     status: Mapped[str] = mapped_column(String(24), default="pending", index=True)
     last_error: Mapped[str | None] = mapped_column(Text)
     backfill_cursor: Mapped[str | None] = mapped_column(String(256))
+    backfill_stop_id: Mapped[int | None] = mapped_column(Integer)
+    pending_gaps: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    archive_initialized: Mapped[bool] = mapped_column(Boolean, default=False)
+    archive_cursor: Mapped[str | None] = mapped_column(String(256))
+    archive_error: Mapped[str | None] = mapped_column(Text)
     last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_collected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
@@ -51,6 +67,7 @@ class ChannelMetricSnapshot(Base):
     observed_bucket: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     subscriber_count: Mapped[int | None] = mapped_column(Integer)
     posts_seen: Mapped[int] = mapped_column(Integer, default=0)
+    fresh_average_views: Mapped[float | None] = mapped_column(Float)
     collected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     channel: Mapped[Channel] = relationship(back_populates="snapshots")

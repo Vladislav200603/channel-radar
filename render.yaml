@@ -12,6 +12,8 @@ services:
         value: 3.12.8
       - key: ENVIRONMENT
         value: production
+      - key: SCHEDULER_ENABLED
+        value: "true"
       - key: DATABASE_URL
         sync: false
       - key: BASE_URL

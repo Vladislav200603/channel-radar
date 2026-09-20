@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Видалити @{{ channel.username }} · Channel Radar{% endblock %}
+{% block content %}
+<nav class="breadcrumbs"><a href="/">Канали</a><span>/</span><span>Видалення</span></nav>
+<section class="delete-card">
+  <span class="eyebrow">КЕРУВАННЯ КАНАЛОМ</span>
+  <h1>Видалити канал?</h1>
+  <h2>{{ channel.title or ('@' ~ channel.username) }}</h2>
+  <p class="handle">@{{ channel.username }}</p>
+  <p>Буде видалено канал зі списку, <strong>{{ post_count }} збережених постів</strong>, їхні метрики та AI-дайджести.</p>
+  <p>Це звільнить одне місце в ліміті. Оригінальний Telegram-канал і його публікації залишаться незмінними.</p>
+  <div class="notice notice-warning">Скасувати видалення історії неможливо. Канал можна додати знову, але збір даних почнеться заново.</div>
+  <form action="/channels/{{ channel.username }}/delete" method="post" class="channel-actions">
+    <input type="hidden" name="confirmation_token" value="{{ confirmation_token }}">
+    <a class="button button-secondary" href="/">Скасувати</a>
+    <button class="button button-danger" type="submit">Так, видалити @{{ channel.username }}</button>
+  </form>
+</section>
+{% endblock %}

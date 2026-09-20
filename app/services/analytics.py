@@ -9,8 +9,16 @@ def view_multiplier(views: int | None, baseline: float | int | None) -> float | 
     return round(views / baseline, 2)
 
 
-def annotate_view_anomalies(rows: list[dict]) -> list[dict]:
-    values = [row["views"] for row in rows if isinstance(row.get("views"), int) and row["views"] >= 0]
+def annotate_view_anomalies(
+    rows: list[dict], *, baseline_values: list[int | None] | None = None
+) -> list[dict]:
+    """Annotate displayed rows against one consistent reference, including across pages.
+
+    None retains the original current-row reference. An explicitly empty reference
+    means no usable baseline, rather than silently substituting the current page.
+    """
+    source_values = baseline_values if baseline_values is not None else [row.get("views") for row in rows]
+    values = [value for value in source_values if isinstance(value, int) and value >= 0]
     baseline = median(values) if values else None
     for row in rows:
         multiplier = view_multiplier(row.get("views"), baseline)
